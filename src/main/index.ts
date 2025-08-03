@@ -57,11 +57,33 @@ class BrawzaApp {
       await this.cleanup();
     });
 
-    // Security: Prevent new window creation
+    // Handle WebView permissions and security
     app.on('web-contents-created', (event, contents) => {
+      // Handle new window requests
       contents.setWindowOpenHandler(({ url }) => {
         console.log('Blocked new window:', url);
         return { action: 'deny' };
+      });
+      
+      // Handle permission requests for WebViews
+      contents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+        // Allow permissions that are safe for browsing
+        const allowedPermissions = [
+          'notifications',
+          'geolocation',
+          'camera',
+          'microphone',
+          'clipboard-read',
+          'clipboard-sanitized-write'
+        ];
+        
+        if (allowedPermissions.includes(permission)) {
+          console.log(`Allowing permission: ${permission}`);
+          callback(true);
+        } else {
+          console.log(`Denying permission: ${permission}`);
+          callback(false);
+        }
       });
     });
   }
@@ -79,7 +101,9 @@ class BrawzaApp {
         preload: path.join(__dirname, '../renderer/preload.js'),
         webSecurity: true,
         allowRunningInsecureContent: false,
-        webviewTag: true
+        webviewTag: true,
+        experimentalFeatures: true,
+        enableBlinkFeatures: 'CSSGridLayout,CSSContainment'
       },
       show: false
     });
@@ -104,24 +128,49 @@ class BrawzaApp {
   }
 
   private setupIPC(): void {
-    // Basic IPC handlers for testing
+    // WebView browser controls - these are handled by the renderer process
+    // The main process just logs for debugging purposes
     ipcMain.handle('browser:navigate', async (event, url: string) => {
-      console.log('Navigate to:', url);
+      console.log('WebView Navigate to:', url);
       return { success: true };
     });
 
     ipcMain.handle('browser:back', async () => {
-      console.log('Go back');
+      console.log('WebView Go back');
+      // WebView back/forward is handled in renderer
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          this.mainWindow.webContents.send('webview:go-back');
+        } catch (error) {
+          console.error('Error sending webview:go-back:', error);
+        }
+      }
       return { success: true };
     });
 
     ipcMain.handle('browser:forward', async () => {
-      console.log('Go forward');
+      console.log('WebView Go forward');
+      // WebView back/forward is handled in renderer
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          this.mainWindow.webContents.send('webview:go-forward');
+        } catch (error) {
+          console.error('Error sending webview:go-forward:', error);
+        }
+      }
       return { success: true };
     });
 
     ipcMain.handle('browser:refresh', async () => {
-      console.log('Refresh');
+      console.log('WebView Refresh');
+      // WebView refresh is handled in renderer
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          this.mainWindow.webContents.send('webview:refresh');
+        } catch (error) {
+          console.error('Error sending webview:refresh:', error);
+        }
+      }
       return { success: true };
     });
 
@@ -394,15 +443,23 @@ class BrawzaApp {
         console.warn('Performance warning:', warnings);
         
         // Send to renderer process if window exists
-        if (this.mainWindow) {
-          this.mainWindow.webContents.send('performance:warning', { metrics, warnings });
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          try {
+            this.mainWindow.webContents.send('performance:warning', { metrics, warnings });
+          } catch (error) {
+            console.error('Error sending performance warning:', error);
+          }
         }
       });
 
       this.performanceMonitor.on('metricsUpdated', (metrics) => {
         // Send updated metrics to renderer process if window exists
-        if (this.mainWindow) {
-          this.mainWindow.webContents.send('performance:metrics', metrics);
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          try {
+            this.mainWindow.webContents.send('performance:metrics', metrics);
+          } catch (error) {
+            console.error('Error sending performance metrics:', error);
+          }
         }
       });
 

@@ -3,6 +3,13 @@ import { contextBridge, ipcRenderer } from 'electron';
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Development flag
+  isDevelopment: process.env.NODE_ENV !== 'production',
+  
+  // App info
+  appVersion: '1.0.0',
+  platform: process.platform,
+  
   // Browser automation
   navigateTo: (url: string) => ipcRenderer.invoke('browser:navigate', url),
   goBack: () => ipcRenderer.invoke('browser:back'),
@@ -60,6 +67,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   onPerformanceWarning: (callback: (data: { metrics: any; warnings: string[] }) => void) => {
     ipcRenderer.on('performance:warning', (event, data) => callback(data));
+  },
+
+  // WebView control events
+  onWebViewBack: (callback: () => void) => {
+    ipcRenderer.on('webview:go-back', () => callback());
+  },
+  
+  onWebViewForward: (callback: () => void) => {
+    ipcRenderer.on('webview:go-forward', () => callback());
+  },
+  
+  onWebViewRefresh: (callback: () => void) => {
+    ipcRenderer.on('webview:refresh', () => callback());
   }
 });
 
@@ -67,6 +87,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 declare global {
   interface Window {
     electronAPI: {
+      isDevelopment: boolean;
+      appVersion: string;
+      platform: string;
       navigateTo: (url: string) => Promise<void>;
       goBack: () => Promise<void>;
       goForward: () => Promise<void>;
@@ -97,6 +120,9 @@ declare global {
       onAIResponse: (callback: (service: string, response: string) => void) => void;
       onPerformanceMetrics: (callback: (metrics: any) => void) => void;
       onPerformanceWarning: (callback: (data: { metrics: any; warnings: string[] }) => void) => void;
+      onWebViewBack: (callback: () => void) => void;
+      onWebViewForward: (callback: () => void) => void;
+      onWebViewRefresh: (callback: () => void) => void;
     };
   }
 }

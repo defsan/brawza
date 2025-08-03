@@ -6,27 +6,29 @@ class BrawzaRenderer {
   private sidebarWidth: number = 400;
   private isResizing: boolean = false;
   private currentPageId: string = 'main-page';
+  private webViewReady: boolean = false;
+  private isLoading: boolean = false;
 
   constructor() {
     this.initializeEventListeners();
     this.initializeWebview();
     this.initializeResizer();
-    this.initializePuppeteerPage();
     this.loadSettings();
+    // Puppeteer page is now created only when needed for AI automation
   }
 
   private initializeEventListeners(): void {
-    // Navigation controls
+    // Navigation controls - handle WebView directly
     document.getElementById('back-btn')?.addEventListener('click', () => {
-      window.electronAPI.goBack();
+      this.goBack();
     });
 
     document.getElementById('forward-btn')?.addEventListener('click', () => {
-      window.electronAPI.goForward();
+      this.goForward();
     });
 
     document.getElementById('refresh-btn')?.addEventListener('click', () => {
-      window.electronAPI.refresh();
+      this.refresh();
     });
 
     document.getElementById('go-btn')?.addEventListener('click', () => {
@@ -128,6 +130,19 @@ class BrawzaRenderer {
       this.displayAIResponse(service, response);
     });
 
+    // Listen for WebView control events from main process
+    window.electronAPI.onWebViewBack(() => {
+      this.goBack();
+    });
+
+    window.electronAPI.onWebViewForward(() => {
+      this.goForward();
+    });
+
+    window.electronAPI.onWebViewRefresh(() => {
+      this.refresh();
+    });
+
     // Add new AI features buttons
     document.getElementById('analyze-page-btn')?.addEventListener('click', () => {
       this.analyzeCurrentPage();
@@ -144,36 +159,98 @@ class BrawzaRenderer {
 
   private initializeWebview(): void {
     const webview = document.getElementById('browser-view') as any;
-    if (!webview) return;
+    if (!webview) {
+      console.error('WebView element not found');
+      return;
+    }
+
+    // Set initial WebView properties for better web compatibility
+    webview.setAttribute('allowpopups', 'false');
+    webview.setAttribute('nodeintegration', 'false');
+    webview.setAttribute('nodeintegrationinsubframes', 'false');
+    webview.setAttribute('webpreferences', 'contextIsolation=false,enableRemoteModule=false,sandbox=false,javascript=true,webSecurity=false,allowRunningInsecureContent=true,experimentalFeatures=true');
+    webview.setAttribute('useragent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+    // Enable modern web features and disable CSP for WebView content
+    webview.setAttribute('partition', 'persist:webview');
+    webview.setAttribute('disablewebsecurity', 'true');
 
     // Wait for webview to be ready
     webview.addEventListener('dom-ready', () => {
-      console.log('Webview ready');
+      console.log('WebView DOM ready');
+      this.onWebViewReady();
     });
 
     // Handle navigation changes
     webview.addEventListener('did-navigate', (event: any) => {
-      this.updateUrlBar(event.url);
-      console.log('Navigated to:', event.url);
+      if (event && event.url) {
+        this.updateUrlBar(event.url);
+        console.log('WebView navigated to:', event.url);
+      }
+    });
+
+    // Handle console messages from webview for debugging
+    webview.addEventListener('console-message', (event: any) => {
+      // Filter out common non-critical warnings
+      const message = event.message;
+      const isPreloadWarning = message.includes('was preloaded using link preload but not used');
+      const isGenerateWarning = message.includes('generate_204') || message.includes('generate_');
+      
+      // Only log important messages, filter noise
+      if (!isPreloadWarning && !isGenerateWarning && event.level !== 1) {
+        console.log('WebView Console:', event.level, message);
+      }
+    });
+
+    // Handle permission requests
+    webview.addEventListener('permission-request', (event: any) => {
+      if (event.permission === 'geolocation' || event.permission === 'notifications') {
+        // Allow basic permissions that might be needed for modern websites
+        event.request.allow();
+      } else {
+        event.request.deny();
+      }
     });
 
     // Handle navigation in same page
     webview.addEventListener('did-navigate-in-page', (event: any) => {
-      this.updateUrlBar(event.url);
+      if (event && event.url) {
+        this.updateUrlBar(event.url);
+      }
     });
 
     // Handle loading states
     webview.addEventListener('did-start-loading', () => {
-      console.log('Started loading');
+      console.log('WebView started loading');
+      this.setLoadingState(true);
     });
 
     webview.addEventListener('did-finish-load', () => {
-      console.log('Finished loading');
+      console.log('WebView finished loading');
+      this.setLoadingState(false);
     });
 
     // Handle errors
     webview.addEventListener('did-fail-load', (event: any) => {
-      console.error('Failed to load:', event);
+      console.error('WebView failed to load:', event);
+      this.setLoadingState(false);
+      this.showErrorPage(event.errorDescription || 'Failed to load page');
+    });
+
+    // Handle crashed webview
+    webview.addEventListener('crashed', () => {
+      console.error('WebView crashed');
+      this.showErrorPage('The page has crashed. Please refresh.');
+    });
+
+    // Handle webview unresponsive
+    webview.addEventListener('unresponsive', () => {
+      console.warn('WebView became unresponsive');
+    });
+
+    // Handle webview responsive again
+    webview.addEventListener('responsive', () => {
+      console.log('WebView became responsive again');
     });
   }
 
@@ -193,15 +270,120 @@ class BrawzaRenderer {
       }
     }
 
-    // Navigate the webview directly
+    // Navigate the webview safely
     const webview = document.getElementById('browser-view') as any;
     if (webview) {
-      webview.src = url;
-      this.currentUrl = url;
+      try {
+        // Use src attribute for immediate navigation, loadURL for programmatic
+        webview.src = url;
+        this.currentUrl = url;
+        console.log('WebView navigating to:', url);
+        
+        // Also try loadURL as backup
+        if (webview.loadURL) {
+          webview.loadURL(url).catch((error: any) => {
+            console.warn('loadURL failed, using src attribute:', error);
+          });
+        }
+      } catch (error) {
+        console.error('Error navigating WebView:', error);
+        this.showErrorPage('Failed to navigate to URL');
+      }
+    } else {
+      console.warn('WebView element not found');
     }
 
-    // Also notify main process
-    window.electronAPI.navigateTo(url);
+    // Also notify main process for logging
+    window.electronAPI.navigateTo(url).catch(console.error);
+  }
+
+  private onWebViewReady(): void {
+    this.webViewReady = true;
+    console.log('WebView is ready for navigation');
+    
+    // Set additional WebView properties after DOM ready
+    const webview = document.getElementById('browser-view') as any;
+    if (webview) {
+      // Enable debugging in development mode
+      if (window.electronAPI.isDevelopment && webview.openDevTools) {
+        console.log('Development mode detected, opening WebView dev tools');
+        webview.openDevTools();
+      }
+      
+      // Test navigation to verify WebView is working
+      if (webview.getUserAgent) {
+        console.log('WebView session ready, user agent:', webview.getUserAgent());
+      } else {
+        console.log('WebView session ready');
+      }
+    }
+  }
+
+  private isWebViewReady(): boolean {
+    return this.webViewReady;
+  }
+
+  private setLoadingState(loading: boolean): void {
+    this.isLoading = loading;
+    // Update UI to show loading state
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.textContent = loading ? '⏳' : '↻';
+    }
+  }
+
+  private showErrorPage(message: string): void {
+    const webview = document.getElementById('browser-view') as any;
+    if (webview) {
+      const errorHtml = `
+        <html>
+          <head><title>Error</title></head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; text-align: center; background: #f5f5f5;">
+            <h1 style="color: #d32f2f;">⚠️ Navigation Error</h1>
+            <p style="color: #666; font-size: 16px;">${message}</p>
+            <button onclick="history.back()" style="padding: 10px 20px; background: #007aff; color: white; border: none; border-radius: 6px; cursor: pointer;">Go Back</button>
+          </body>
+        </html>
+      `;
+      webview.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`);
+    }
+  }
+
+  private goBack(): void {
+    const webview = document.getElementById('browser-view') as any;
+    if (webview && this.isWebViewReady()) {
+      try {
+        if (webview.canGoBack && webview.canGoBack()) {
+          webview.goBack();
+        }
+      } catch (error) {
+        console.error('Error going back:', error);
+      }
+    }
+  }
+
+  private goForward(): void {
+    const webview = document.getElementById('browser-view') as any;
+    if (webview && this.isWebViewReady()) {
+      try {
+        if (webview.canGoForward && webview.canGoForward()) {
+          webview.goForward();
+        }
+      } catch (error) {
+        console.error('Error going forward:', error);
+      }
+    }
+  }
+
+  private refresh(): void {
+    const webview = document.getElementById('browser-view') as any;
+    if (webview && this.isWebViewReady()) {
+      try {
+        webview.reload();
+      } catch (error) {
+        console.error('Error refreshing:', error);
+      }
+    }
   }
 
   private updateUrlBar(url: string): void {
@@ -464,16 +646,25 @@ class BrawzaRenderer {
     }
   }
 
-  private async initializePuppeteerPage(): Promise<void> {
+  private async ensurePuppeteerPage(): Promise<boolean> {
     try {
+      // Only create Puppeteer page when needed for AI automation
+      const pagesResult = await window.electronAPI.getAllPages();
+      if (pagesResult.success && pagesResult.pages && pagesResult.pages.includes(this.currentPageId)) {
+        return true; // Page already exists
+      }
+      
       const result = await window.electronAPI.createPage(this.currentPageId);
       if (result.success) {
-        console.log('Puppeteer page initialized:', this.currentPageId);
+        console.log('Puppeteer page created for AI automation:', this.currentPageId);
+        return true;
       } else {
-        console.error('Failed to initialize Puppeteer page:', result.error);
+        console.error('Failed to create Puppeteer page:', result.error);
+        return false;
       }
     } catch (error) {
-      console.error('Error initializing Puppeteer page:', error);
+      console.error('Error creating Puppeteer page:', error);
+      return false;
     }
   }
 
@@ -486,7 +677,14 @@ class BrawzaRenderer {
     this.displayMessage('user', 'Analyze this page');
     
     try {
-      // Navigate Puppeteer to current URL
+      // Ensure Puppeteer page exists for AI automation
+      const puppeteerReady = await this.ensurePuppeteerPage();
+      if (!puppeteerReady) {
+        this.displayMessage('ai', 'Sorry, I could not initialize the automation engine for page analysis.');
+        return;
+      }
+      
+      // Navigate Puppeteer to current URL for content extraction
       await window.electronAPI.navigateToUrl(this.currentPageId, this.currentUrl);
       
       // Get page content
@@ -514,7 +712,14 @@ class BrawzaRenderer {
     this.displayMessage('user', 'Summarize this page');
     
     try {
-      // Navigate Puppeteer to current URL
+      // Ensure Puppeteer page exists for AI automation
+      const puppeteerReady = await this.ensurePuppeteerPage();
+      if (!puppeteerReady) {
+        this.displayMessage('ai', 'Sorry, I could not initialize the automation engine for page summarization.');
+        return;
+      }
+      
+      // Navigate Puppeteer to current URL for content extraction
       await window.electronAPI.navigateToUrl(this.currentPageId, this.currentUrl);
       
       // Get page content
@@ -541,7 +746,14 @@ class BrawzaRenderer {
     this.displayMessage('user', 'Take a screenshot of this page');
     
     try {
-      // Navigate Puppeteer to current URL
+      // Ensure Puppeteer page exists for AI automation
+      const puppeteerReady = await this.ensurePuppeteerPage();
+      if (!puppeteerReady) {
+        this.displayMessage('ai', 'Sorry, I could not initialize the automation engine for screenshot capture.');
+        return;
+      }
+      
+      // Navigate Puppeteer to current URL for screenshot
       await window.electronAPI.navigateToUrl(this.currentPageId, this.currentUrl);
       
       // Take screenshot
