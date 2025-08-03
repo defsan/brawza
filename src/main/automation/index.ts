@@ -1,0 +1,1 @@
+export { PuppeteerManager, PageInfo, AutomationResult } from './puppeteer-manager';

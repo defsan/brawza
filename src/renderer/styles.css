@@ -1,0 +1,509 @@
+/* Global Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header Styles */
+#header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  -webkit-app-region: drag;
+}
+
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  -webkit-app-region: no-drag;
+}
+
+.nav-controls button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-controls button:hover {
+  background-color: #f0f0f0;
+}
+
+.nav-controls button:active {
+  background-color: #e0e0e0;
+}
+
+#url-bar {
+  flex: 1;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #ccc;
+  border-radius: 16px;
+  font-size: 14px;
+  outline: none;
+  margin: 0 8px;
+}
+
+#url-bar:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+  outline: none;
+}
+
+#url-bar::selection {
+  background-color: #007aff;
+  color: white;
+}
+
+.window-controls {
+  display: flex;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.window-controls button:hover {
+  background-color: #f0f0f0;
+}
+
+/* Main Content */
+#main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+#browser-container {
+  flex: 1;
+  position: relative;
+}
+
+#browser-view {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* AI Sidebar */
+.sidebar {
+  width: 400px;
+  background-color: #fff;
+  border-left: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+  position: relative;
+  min-width: 300px;
+  max-width: 70vw;
+}
+
+.sidebar.hidden {
+  transform: translateX(100%);
+  width: 0;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #f8f9fa;
+}
+
+.sidebar-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+#ai-service-select {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+#sidebar-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+#sidebar-close:hover {
+  background-color: #e9ecef;
+}
+
+/* AI Action Buttons */
+.ai-actions {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #f8f9fa;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-action-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  background-color: #007aff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.2s ease;
+}
+
+.ai-action-btn:hover {
+  background-color: #0056b3;
+}
+
+.ai-action-btn:active {
+  background-color: #004085;
+}
+
+.ai-action-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Sidebar Resizer */
+.sidebar-resizer {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 10;
+}
+
+.sidebar-resizer:hover {
+  background: rgba(0, 122, 255, 0.3);
+}
+
+.chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#chat-messages {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background-color: #fafafa;
+}
+
+.chat-input-container {
+  display: flex;
+  padding: 16px;
+  border-top: 1px solid #e0e0e0;
+  background-color: #fff;
+}
+
+#chat-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  resize: none;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  max-height: 100px;
+}
+
+#chat-input:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+}
+
+#send-btn {
+  margin-left: 8px;
+  padding: 8px 16px;
+  background-color: #007aff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+#send-btn:hover {
+  background-color: #0056b3;
+}
+
+#send-btn:active {
+  background-color: #004085;
+}
+
+/* Chat Messages */
+.message {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  max-width: 80%;
+}
+
+.message.user {
+  background-color: #007aff;
+  color: white;
+  margin-left: auto;
+}
+
+.message.ai {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+.message .sender {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  opacity: 0.7;
+}
+
+/* Screenshot Messages */
+.screenshot-message {
+  max-width: 95%;
+}
+
+.screenshot-message img {
+  display: block;
+  margin-top: 8px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease;
+}
+
+.screenshot-message img:hover {
+  transform: scale(1.02);
+}
+
+/* Modal Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background-color: #fff;
+  border-radius: 12px;
+  width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#settings-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modal-body {
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.settings-help {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+  line-height: 1.4;
+  background-color: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 3px solid #007aff;
+}
+
+.service-config {
+  background-color: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.service-config h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.service-config input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.service-config button {
+  padding: 6px 12px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.service-config button:hover {
+  background-color: #218838;
+}
+
+.service-links {
+  margin-bottom: 8px;
+}
+
+.dashboard-link {
+  display: inline-block;
+  color: #007aff;
+  text-decoration: none;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #f0f8ff;
+  border: 1px solid #d0e8ff;
+  transition: all 0.2s ease;
+}
+
+.dashboard-link:hover {
+  background-color: #e0f0ff;
+  border-color: #007aff;
+  text-decoration: none;
+}
+
+.dashboard-link:active {
+  background-color: #d0e8ff;
+}
+
+.modal-footer {
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+  text-align: right;
+}
+
+#save-settings {
+  padding: 10px 20px;
+  background-color: #007aff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+#save-settings:hover {
+  background-color: #0056b3;
+}
+
+/* Utility Classes */
+.hidden {
+  display: none !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    z-index: 100;
+  }
+  
+  .modal-content {
+    width: 90%;
+    margin: 20px;
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "name": "brawza",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "start": "npm run build && electron .",
+    "dev": "concurrently \"npm run build:watch\" \"wait-on dist/main/index.js && electron .\"",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "jest tests/unit --coverage",
+    "test:integration": "jest tests/integration --testTimeout=30000",
+    "test:e2e": "jest tests/e2e --testTimeout=60000",
+    "test:all": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:build": "npm run build && npm run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/defsan/brawza.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/defsan/brawza/issues"
+  },
+  "homepage": "https://github.com/defsan/brawza#readme",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.1.0",
+    "concurrently": "^9.2.0",
+    "electron": "^37.2.5",
+    "electron-builder": "^26.0.12",
+    "electron-chromedriver": "^37.2.4",
+    "jest": "^30.0.5",
+    "nodemon": "^3.1.10",
+    "spectron": "^19.0.0",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
+    "wait-on": "^8.0.4"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.57.0",
+    "@google/generative-ai": "^0.24.1",
+    "@types/puppeteer": "^5.4.7",
+    "keytar": "^7.9.0",
+    "openai": "^5.11.0",
+    "puppeteer": "^24.15.0"
+  },
+  "build": {
+    "appId": "com.brawza.ai-browser",
+    "productName": "Brawza",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        },
+        {
+          "target": "zip",
+          "arch": ["universal"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Network",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "defsan",
+      "repo": "brawza"
+    }
+  }
+}
