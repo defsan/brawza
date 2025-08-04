@@ -168,7 +168,7 @@ class BrawzaRenderer {
     webview.setAttribute('allowpopups', 'false');
     webview.setAttribute('nodeintegration', 'false');
     webview.setAttribute('nodeintegrationinsubframes', 'false');
-    webview.setAttribute('webpreferences', 'contextIsolation=false,enableRemoteModule=false,sandbox=false,javascript=true,webSecurity=false,allowRunningInsecureContent=true,experimentalFeatures=true');
+    webview.setAttribute('webpreferences', 'contextIsolation=true,enableRemoteModule=false,sandbox=true,javascript=true,webSecurity=false,allowRunningInsecureContent=false');
     webview.setAttribute('useragent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     // Enable modern web features and disable CSP for WebView content
@@ -304,11 +304,11 @@ class BrawzaRenderer {
     // Set additional WebView properties after DOM ready
     const webview = document.getElementById('browser-view') as any;
     if (webview) {
-      // Enable debugging in development mode
-      if (window.electronAPI.isDevelopment && webview.openDevTools) {
-        console.log('Development mode detected, opening WebView dev tools');
-        webview.openDevTools();
-      }
+      // Don't automatically open WebView dev tools to save memory
+      // if (window.electronAPI.isDevelopment && webview.openDevTools) {
+      //   console.log('Development mode detected, opening WebView dev tools');
+      //   webview.openDevTools();
+      // }
       
       // Test navigation to verify WebView is working
       if (webview.getUserAgent) {
@@ -529,6 +529,13 @@ class BrawzaRenderer {
 
   private async testConnection(service: string): Promise<void> {
     try {
+      // First, save the API key if it's been entered
+      const keyInput = document.getElementById(`${service}-key`) as HTMLInputElement;
+      if (keyInput && keyInput.value) {
+        this.showNotification(`Saving ${service.toUpperCase()} API key...`);
+        await window.electronAPI.storeToken(service, keyInput.value);
+      }
+      
       this.showNotification(`Testing ${service.toUpperCase()} connection...`);
       const result = await window.electronAPI.testConnection(service);
       

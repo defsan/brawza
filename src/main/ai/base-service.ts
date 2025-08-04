@@ -1,13 +1,17 @@
 // Base AI service interface and abstract class
+import { BrowserToolCall } from '../../shared/browser-tools';
 
 export interface AIMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   timestamp?: number;
+  toolCalls?: BrowserToolCall[];
+  toolCallId?: string; // For tool result messages
 }
 
 export interface AIResponse {
   content: string;
+  toolCalls?: BrowserToolCall[];
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -44,7 +48,9 @@ export abstract class BaseAIService {
   abstract getServiceName(): string;
   abstract getDefaultModel(): string;
   abstract sendMessage(messages: AIMessage[]): Promise<AIResponse>;
+  abstract sendMessageWithTools(messages: AIMessage[], tools?: any[]): Promise<AIResponse>;
   abstract validateApiKey(): Promise<boolean>;
+  abstract supportsToolCalling(): boolean;
 
   // Common utility methods
   protected createUserMessage(content: string): AIMessage {
@@ -59,6 +65,24 @@ export abstract class BaseAIService {
     return {
       role: 'system',
       content,
+      timestamp: Date.now()
+    };
+  }
+
+  protected createToolMessage(toolCallId: string, content: string): AIMessage {
+    return {
+      role: 'tool',
+      content,
+      toolCallId,
+      timestamp: Date.now()
+    };
+  }
+
+  protected createAssistantMessage(content: string, toolCalls?: BrowserToolCall[]): AIMessage {
+    return {
+      role: 'assistant',
+      content,
+      toolCalls,
       timestamp: Date.now()
     };
   }
@@ -146,6 +170,23 @@ export abstract class BaseAIService {
     
     const response = await this.sendMessage(messages);
     return response.content;
+  }
+
+  // Helper method for tool-enabled requests
+  async sendSingleMessageWithTools(content: string, tools?: any[], systemPrompt?: string): Promise<AIResponse> {
+    const messages: AIMessage[] = [];
+    
+    if (systemPrompt) {
+      messages.push(this.createSystemMessage(systemPrompt));
+    }
+    
+    messages.push(this.createUserMessage(content));
+    
+    if (this.supportsToolCalling() && tools) {
+      return await this.sendMessageWithTools(messages, tools);
+    } else {
+      return await this.sendMessage(messages);
+    }
   }
 
   // Get service status and configuration

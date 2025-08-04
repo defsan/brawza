@@ -19,7 +19,7 @@ export interface AutomationResult {
 export class PuppeteerManager extends EventEmitter {
   private browser: Browser | null = null;
   private pages: Map<string, Page> = new Map();
-  private isInitialized = false;
+  private _isInitialized = false;
   private config = {
     headless: true,
     devtools: false,
@@ -52,11 +52,11 @@ export class PuppeteerManager extends EventEmitter {
 
       this.browser.on('disconnected', () => {
         console.log('Puppeteer browser disconnected');
-        this.isInitialized = false;
+        this._isInitialized = false;
         this.emit('browserDisconnected');
       });
 
-      this.isInitialized = true;
+      this._isInitialized = true;
       console.log('Puppeteer browser initialized successfully');
       return true;
     } catch (error) {
@@ -366,7 +366,11 @@ export class PuppeteerManager extends EventEmitter {
   }
 
   isReady(): boolean {
-    return this.isInitialized && this.browser !== null;
+    return this._isInitialized && this.browser !== null;
+  }
+
+  isInitialized(): boolean {
+    return this._isInitialized;
   }
 
   async cleanup(): Promise<void> {
@@ -398,7 +402,7 @@ export class PuppeteerManager extends EventEmitter {
       console.error('Error during Puppeteer cleanup:', error);
     } finally {
       // Always mark as not initialized, even if cleanup fails
-      this.isInitialized = false;
+      this._isInitialized = false;
     }
   }
 }

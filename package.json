@@ -34,7 +34,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.1.0",
     "concurrently": "^9.2.0",
-    "electron": "^37.2.5",
+    "electron": "^27.0.0",
     "electron-builder": "^26.0.12",
     "electron-chromedriver": "^37.2.4",
     "jest": "^30.0.5",

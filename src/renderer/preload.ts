@@ -52,6 +52,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('security:store-token', service, token),
   getToken: (service: string) => ipcRenderer.invoke('security:get-token', service),
   
+  // Browser Agent
+  agentSendMessage: (conversationId: string, userMessage: string, options: any) => 
+    ipcRenderer.invoke('agent:send-message', conversationId, userMessage, options),
+  agentGetConversation: (conversationId: string) => 
+    ipcRenderer.invoke('agent:get-conversation', conversationId),
+  agentClearConversation: (conversationId: string) => 
+    ipcRenderer.invoke('agent:clear-conversation', conversationId),
+  agentGetActiveConversations: () => 
+    ipcRenderer.invoke('agent:get-active-conversations'),
+  agentGetCurrentContext: () => 
+    ipcRenderer.invoke('agent:get-current-context'),
+  agentUpdateContext: (pageId: string, options?: any) => 
+    ipcRenderer.invoke('agent:update-context', pageId, options),
+  agentCleanupConversations: () => 
+    ipcRenderer.invoke('agent:cleanup-conversations'),
+  
   // Event listeners
   onNavigationChange: (callback: (url: string) => void) => {
     ipcRenderer.on('navigation:changed', (event, url) => callback(url));
@@ -116,6 +132,13 @@ declare global {
       getRateLimits: () => Promise<{ success: boolean; stats?: any; error?: string }>;
       storeToken: (service: string, token: string) => Promise<void>;
       getToken: (service: string) => Promise<string>;
+      agentSendMessage: (conversationId: string, userMessage: string, options: any) => Promise<{ success: boolean; response?: any; error?: string }>;
+      agentGetConversation: (conversationId: string) => Promise<{ success: boolean; conversation?: any; error?: string }>;
+      agentClearConversation: (conversationId: string) => Promise<{ success: boolean; error?: string }>;
+      agentGetActiveConversations: () => Promise<{ success: boolean; conversations?: any[]; error?: string }>;
+      agentGetCurrentContext: () => Promise<{ success: boolean; context?: any; error?: string }>;
+      agentUpdateContext: (pageId: string, options?: any) => Promise<{ success: boolean; context?: any; error?: string }>;
+      agentCleanupConversations: () => Promise<{ success: boolean; error?: string }>;
       onNavigationChange: (callback: (url: string) => void) => void;
       onAIResponse: (callback: (service: string, response: string) => void) => void;
       onPerformanceMetrics: (callback: (metrics: any) => void) => void;

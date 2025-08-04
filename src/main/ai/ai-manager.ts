@@ -16,6 +16,13 @@ export class AIManager {
   }
 
   /**
+   * Get a specific AI service
+   */
+  getService(serviceType: AIServiceType): BaseAIService | null {
+    return this.services.get(serviceType) || null;
+  }
+
+  /**
    * Initialize an AI service with its API key
    */
   async initializeService(serviceType: AIServiceType): Promise<boolean> {

@@ -1,4 +1,5 @@
 import { BaseAIService, AIMessage, AIResponse, AIServiceConfig } from './base-service';
+import { BrowserToolCall } from '../../shared/browser-tools';
 
 export class OpenAIService extends BaseAIService {
   constructor(config: AIServiceConfig) {
@@ -11,6 +12,10 @@ export class OpenAIService extends BaseAIService {
 
   getDefaultModel(): string {
     return 'gpt-3.5-turbo';
+  }
+
+  supportsToolCalling(): boolean {
+    return true;
   }
 
   async validateApiKey(): Promise<boolean> {
@@ -78,6 +83,98 @@ export class OpenAIService extends BaseAIService {
 
     } catch (error) {
       this.handleError(error, 'sending message');
+    }
+  }
+
+  async sendMessageWithTools(messages: AIMessage[], tools?: any[]): Promise<AIResponse> {
+    try {
+      const openaiMessages = messages.map(msg => {
+        if (msg.role === 'tool') {
+          return {
+            role: 'tool' as const,
+            content: msg.content,
+            tool_call_id: msg.toolCallId
+          };
+        } else if (msg.role === 'assistant' && msg.toolCalls) {
+          return {
+            role: 'assistant' as const,
+            content: msg.content,
+            tool_calls: msg.toolCalls.map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.arguments)
+              }
+            }))
+          };
+        } else {
+          return {
+            role: msg.role as 'system' | 'user' | 'assistant',
+            content: msg.content
+          };
+        }
+      });
+
+      const requestBody: any = {
+        model: this.model,
+        messages: openaiMessages,
+        max_tokens: this.maxTokens,
+        temperature: this.temperature,
+        user: 'brawza-user'
+      };
+
+      if (tools && tools.length > 0) {
+        requestBody.tools = tools;
+        requestBody.tool_choice = 'auto';
+      }
+
+      const response = await this.makeHttpRequest('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: requestBody
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`OpenAI API error: ${response.status} - ${JSON.stringify(response.data)}`);
+      }
+
+      const data = response.data;
+      
+      if (!data.choices || data.choices.length === 0) {
+        throw new Error('No response choices returned from OpenAI');
+      }
+
+      const choice = data.choices[0];
+      const message = choice.message;
+      
+      // Parse tool calls if present
+      let toolCalls: BrowserToolCall[] | undefined;
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        toolCalls = message.tool_calls.map((tc: any) => ({
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments)
+        }));
+      }
+      
+      return {
+        content: message.content || '',
+        toolCalls,
+        usage: data.usage ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens
+        } : undefined,
+        model: data.model,
+        finishReason: choice.finish_reason
+      };
+
+    } catch (error) {
+      this.handleError(error, 'sending message with tools');
     }
   }
 

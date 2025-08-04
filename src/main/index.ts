@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import * as path from 'path';
 import { KeychainManager } from './security/keychain';
 import { SettingsManager } from './security/settings';
 import { HTTPSManager } from './security/https';
 import { AIManager } from './ai/ai-manager';
+import { BrowserAgent } from './ai/browser-agent';
 import { PuppeteerManager } from './automation/puppeteer-manager';
 import { PerformanceMonitor, RateLimiter } from './monitoring';
 
@@ -13,6 +14,7 @@ class BrawzaApp {
   private settingsManager: SettingsManager;
   private httpsManager!: HTTPSManager;
   private aiManager: AIManager;
+  private browserAgent: BrowserAgent | null = null;
   private puppeteerManager: PuppeteerManager;
   private performanceMonitor: PerformanceMonitor;
   private rateLimiter: RateLimiter;
@@ -31,8 +33,10 @@ class BrawzaApp {
     // Handle app ready
     app.whenReady().then(async () => {
       this.httpsManager = new HTTPSManager();
-      await this.initializePuppeteer();
+      // Don't initialize Puppeteer on startup - only when needed
+      // await this.initializePuppeteer();
       this.initializeMonitoring();
+      this.createApplicationMenu();
       this.createMainWindow();
       this.setupIPC();
       this.initializeAIServices();
@@ -88,6 +92,75 @@ class BrawzaApp {
     });
   }
 
+  private createApplicationMenu(): void {
+    const template: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: 'Brawsa',
+        submenu: [
+          { label: 'About Brawsa', role: 'about' },
+          { type: 'separator' },
+          { label: 'Services', role: 'services', submenu: [] },
+          { type: 'separator' },
+          { label: 'Hide Brawsa', accelerator: 'Command+H', role: 'hide' },
+          { label: 'Hide Others', accelerator: 'Command+Shift+H', role: 'hideOthers' },
+          { label: 'Show All', role: 'unhide' },
+          { type: 'separator' },
+          { label: 'Quit Brawsa', accelerator: 'Command+Q', click: () => app.quit() }
+        ]
+      },
+      {
+        label: 'Edit',
+        submenu: [
+          { label: 'Undo', accelerator: 'Command+Z', role: 'undo' },
+          { label: 'Redo', accelerator: 'Shift+Command+Z', role: 'redo' },
+          { type: 'separator' },
+          { label: 'Cut', accelerator: 'Command+X', role: 'cut' },
+          { label: 'Copy', accelerator: 'Command+C', role: 'copy' },
+          { label: 'Paste', accelerator: 'Command+V', role: 'paste' },
+          { label: 'Select All', accelerator: 'Command+A', role: 'selectAll' }
+        ]
+      },
+      {
+        label: 'View',
+        submenu: [
+          { label: 'Reload', accelerator: 'Command+R', role: 'reload' },
+          { label: 'Force Reload', accelerator: 'Command+Shift+R', role: 'forceReload' },
+          { label: 'Toggle Developer Tools', accelerator: 'Alt+Command+I', role: 'toggleDevTools' },
+          { type: 'separator' },
+          { label: 'Actual Size', accelerator: 'Command+0', role: 'resetZoom' },
+          { label: 'Zoom In', accelerator: 'Command+Plus', role: 'zoomIn' },
+          { label: 'Zoom Out', accelerator: 'Command+-', role: 'zoomOut' },
+          { type: 'separator' },
+          { label: 'Toggle Fullscreen', accelerator: 'Control+Command+F', role: 'togglefullscreen' }
+        ]
+      },
+      {
+        label: 'Window',
+        submenu: [
+          { label: 'Minimize', accelerator: 'Command+M', role: 'minimize' },
+          { label: 'Close', accelerator: 'Command+W', role: 'close' },
+          { type: 'separator' },
+          { label: 'Bring All to Front', role: 'front' }
+        ]
+      },
+      {
+        label: 'Help',
+        role: 'help',
+        submenu: [
+          {
+            label: 'Learn More',
+            click: async () => {
+              await shell.openExternal('https://github.com/defsan/brawza');
+            }
+          }
+        ]
+      }
+    ];
+
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+  }
+
   private createMainWindow(): void {
     this.mainWindow = new BrowserWindow({
       width: 1400,
@@ -111,10 +184,11 @@ class BrawzaApp {
     // Load the main renderer
     this.mainWindow.loadFile(path.join(__dirname, '../../src/renderer/index.html'));
     
-    // Open dev tools in development
-    if (process.env.NODE_ENV !== 'production') {
-      this.mainWindow.webContents.openDevTools();
-    }
+    // Don't automatically open dev tools to save memory
+    // Users can still open with Cmd+Opt+I if needed
+    // if (process.env.NODE_ENV !== 'production') {
+    //   this.mainWindow.webContents.openDevTools();
+    // }
 
     // Show window when ready
     this.mainWindow.once('ready-to-show', () => {
@@ -211,6 +285,14 @@ class BrawzaApp {
     // Puppeteer automation handlers
     ipcMain.handle('automation:create-page', async (event, pageId: string) => {
       try {
+        // Initialize Puppeteer on first use only
+        if (!this.puppeteerManager.isInitialized()) {
+          console.log('Initializing Puppeteer on first use...');
+          const initialized = await this.puppeteerManager.initialize();
+          if (!initialized) {
+            throw new Error('Failed to initialize Puppeteer');
+          }
+        }
         const id = await this.puppeteerManager.createPage(pageId);
         return { success: true, pageId: id };
       } catch (error) {
@@ -396,6 +478,106 @@ class BrawzaApp {
         return `Error: ${(error as Error).message}`;
       }
     });
+
+    // Browser Agent IPC handlers
+    ipcMain.handle('agent:send-message', async (event, conversationId: string, userMessage: string, options: any) => {
+      try {
+        if (!this.browserAgent) {
+          throw new Error('Browser agent is not initialized. Please ensure AI services are configured.');
+        }
+
+        console.log(`Agent message from conversation ${conversationId}:`, userMessage);
+        const response = await this.browserAgent.sendMessage(conversationId, userMessage, options);
+        return { success: true, response };
+      } catch (error) {
+        console.error('Agent message failed:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('agent:get-conversation', async (event, conversationId: string) => {
+      try {
+        if (!this.browserAgent) {
+          return { success: false, error: 'Browser agent is not initialized' };
+        }
+
+        const conversation = this.browserAgent.getConversation(conversationId);
+        return { success: true, conversation };
+      } catch (error) {
+        console.error('Failed to get conversation:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('agent:clear-conversation', async (event, conversationId: string) => {
+      try {
+        if (!this.browserAgent) {
+          return { success: false, error: 'Browser agent is not initialized' };
+        }
+
+        this.browserAgent.clearConversation(conversationId);
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to clear conversation:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('agent:get-active-conversations', async () => {
+      try {
+        if (!this.browserAgent) {
+          return { success: false, error: 'Browser agent is not initialized' };
+        }
+
+        const conversations = this.browserAgent.getActiveConversations();
+        return { success: true, conversations };
+      } catch (error) {
+        console.error('Failed to get active conversations:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('agent:get-current-context', async () => {
+      try {
+        if (!this.browserAgent) {
+          return { success: false, error: 'Browser agent is not initialized' };
+        }
+
+        const context = this.browserAgent.getCurrentContext();
+        return { success: true, context };
+      } catch (error) {
+        console.error('Failed to get current context:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('agent:update-context', async (event, pageId: string, options: any = {}) => {
+      try {
+        if (!this.browserAgent) {
+          throw new Error('Browser agent is not initialized');
+        }
+
+        const context = await this.browserAgent.updateContext(pageId, options);
+        return { success: true, context };
+      } catch (error) {
+        console.error('Failed to update context:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('agent:cleanup-conversations', async () => {
+      try {
+        if (!this.browserAgent) {
+          return { success: false, error: 'Browser agent is not initialized' };
+        }
+
+        this.browserAgent.cleanupOldConversations();
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to cleanup conversations:', error);
+        return { success: false, error: (error as Error).message };
+      }
+    });
   }
 
   private async initializePuppeteer(): Promise<void> {
@@ -423,6 +605,11 @@ class BrawzaApp {
 
       if (initializedServices.length > 0) {
         console.log(`AI services initialized: ${initializedServices.join(', ')}`);
+        
+        // Initialize browser agent
+        console.log('Initializing browser agent...');
+        this.browserAgent = new BrowserAgent(this.aiManager, this.puppeteerManager);
+        console.log('Browser agent initialized successfully');
       } else {
         console.log('No AI services initialized. Please configure API keys in settings.');
       }
@@ -435,8 +622,8 @@ class BrawzaApp {
     try {
       console.log('Initializing performance monitoring...');
       
-      // Start performance monitoring
-      this.performanceMonitor.start(10000); // Every 10 seconds
+      // Start performance monitoring with longer interval to reduce overhead
+      this.performanceMonitor.start(30000); // Every 30 seconds instead of 10
       
       // Set up event listeners
       this.performanceMonitor.on('performanceWarning', ({ metrics, warnings }) => {

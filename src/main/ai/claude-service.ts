@@ -13,6 +13,10 @@ export class ClaudeService extends BaseAIService {
     return 'claude-3-haiku-20240307';
   }
 
+  supportsToolCalling(): boolean {
+    return true; // Claude 3 supports tool use
+  }
+
   async validateApiKey(): Promise<boolean> {
     try {
       // Test the API key with a simple request
@@ -96,6 +100,80 @@ export class ClaudeService extends BaseAIService {
 
     } catch (error) {
       this.handleError(error, 'sending message');
+    }
+  }
+
+  async sendMessageWithTools(messages: AIMessage[], tools?: any[]): Promise<AIResponse> {
+    try {
+      // Claude uses a different format - separate system message from conversation
+      const { systemMessage, conversationMessages } = this.processMessagesForClaude(messages);
+
+      const requestBody: any = {
+        model: this.model,
+        max_tokens: this.maxTokens,
+        temperature: this.temperature,
+        messages: conversationMessages
+      };
+
+      if (systemMessage) {
+        requestBody.system = systemMessage;
+      }
+
+      if (tools && tools.length > 0) {
+        requestBody.tools = tools;
+      }
+
+      const response = await this.makeHttpRequest('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01'
+        },
+        body: requestBody
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`Claude API error: ${response.status} - ${JSON.stringify(response.data)}`);
+      }
+
+      const data = response.data;
+      
+      if (!data.content || data.content.length === 0) {
+        throw new Error('No content returned from Claude');
+      }
+
+      // Handle text response
+      let responseText = '';
+      let toolCalls: any[] | undefined;
+      
+      for (const content of data.content) {
+        if (content.type === 'text') {
+          responseText += content.text;
+        } else if (content.type === 'tool_use') {
+          if (!toolCalls) toolCalls = [];
+          toolCalls.push({
+            id: content.id,
+            name: content.name,
+            arguments: content.input
+          });
+        }
+      }
+
+      return {
+        content: responseText,
+        toolCalls,
+        usage: data.usage ? {
+          promptTokens: data.usage.input_tokens,
+          completionTokens: data.usage.output_tokens,
+          totalTokens: data.usage.input_tokens + data.usage.output_tokens
+        } : undefined,
+        model: data.model,
+        finishReason: data.stop_reason
+      };
+
+    } catch (error) {
+      this.handleError(error, 'sending message with tools');
     }
   }
 

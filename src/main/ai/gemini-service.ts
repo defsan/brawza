@@ -13,6 +13,10 @@ export class GeminiService extends BaseAIService {
     return 'gemini-pro';
   }
 
+  supportsToolCalling(): boolean {
+    return false; // Gemini function calling implementation can be added later
+  }
+
   async validateApiKey(): Promise<boolean> {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`;
@@ -84,6 +88,12 @@ export class GeminiService extends BaseAIService {
     } catch (error) {
       this.handleError(error, 'sending message');
     }
+  }
+
+  async sendMessageWithTools(messages: AIMessage[], tools?: any[]): Promise<AIResponse> {
+    // For now, Gemini falls back to regular message sending
+    // TODO: Implement Gemini function calling when available
+    return await this.sendMessage(messages);
   }
 
   private convertMessagesToGeminiFormat(messages: AIMessage[]): any[] {
