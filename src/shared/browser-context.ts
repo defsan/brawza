@@ -23,6 +23,8 @@ export interface ElementInfo {
 }
 
 export interface FormFieldInfo {
+  id?: string;
+  className?: string;
   selector: string;
   name?: string;
   type: string;
@@ -37,6 +39,8 @@ export interface LinkInfo {
   href: string;
   title?: string;
   isExternal: boolean;
+  id?: string;
+  className?: string;
 }
 
 export interface BrowserContext {
@@ -160,7 +164,7 @@ export class BrowserContextManager {
     }
 
     // Interactive elements
-    if (ctx.buttons.length > 0) {
+    if (ctx.buttons && ctx.buttons.length > 0) {
       const maxButtons = options.maxElementsPerType || 5;
       const buttonList = ctx.buttons
         .slice(0, maxButtons)
@@ -169,7 +173,7 @@ export class BrowserContextManager {
       parts.push(`Buttons: ${buttonList}${ctx.buttons.length > maxButtons ? '...' : ''}`);
     }
 
-    if (ctx.links.length > 0) {
+    if (ctx.links && ctx.links.length > 0) {
       const maxLinks = options.maxElementsPerType || 5;
       const linkList = ctx.links
         .slice(0, maxLinks)
@@ -178,7 +182,7 @@ export class BrowserContextManager {
       parts.push(`Links: ${linkList}${ctx.links.length > maxLinks ? '...' : ''}`);
     }
 
-    if (ctx.formFields.length > 0) {
+    if (ctx.formFields && ctx.formFields.length > 0) {
       const maxFields = options.maxElementsPerType || 5;
       const fieldList = ctx.formFields
         .slice(0, maxFields)
@@ -212,23 +216,25 @@ export class BrowserContextManager {
         canGoForward: ctx.canGoForward
       },
       elements: {
-        buttons: ctx.buttons.map(btn => ({
+        buttons: (ctx.buttons || []).map(btn => ({
           selector: btn.selector,
           text: btn.text,
           visible: btn.isVisible
         })),
-        links: ctx.links.map(link => ({
+        links: (ctx.links || []).map(link => ({
           text: link.text,
           href: link.href,
           external: link.isExternal
         })),
-        formFields: ctx.formFields.map(field => ({
+        formFields: (ctx.formFields || []).map(field => ({
           selector: field.selector,
           name: field.name,
           type: field.type,
           label: field.label,
           placeholder: field.placeholder,
-          required: field.required
+          required: field.required,
+          id: field.id,
+          className: field.className
         }))
       },
       viewport: ctx.viewportSize,

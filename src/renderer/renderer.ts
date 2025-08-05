@@ -143,6 +143,12 @@ class BrawzaRenderer {
       this.refresh();
     });
 
+    // Listen for agent-triggered WebView navigation
+    window.electronAPI.onAgentNavigateWebView((url: string) => {
+      console.log('Agent requesting WebView navigation to:', url);
+      this.navigateWebViewTo(url, 'agent');
+    });
+
     // Add new AI features buttons
     document.getElementById('analyze-page-btn')?.addEventListener('click', () => {
       this.analyzeCurrentPage();
@@ -233,6 +239,9 @@ class BrawzaRenderer {
     // Handle errors
     webview.addEventListener('did-fail-load', (event: any) => {
       console.error('WebView failed to load:', event);
+      console.error('Failed URL:', event.validatedURL || event.url);
+      console.error('Error code:', event.errorCode);
+      console.error('Error description:', event.errorDescription);
       this.setLoadingState(false);
       this.showErrorPage(event.errorDescription || 'Failed to load page');
     });
@@ -270,20 +279,43 @@ class BrawzaRenderer {
       }
     }
 
+    this.navigateWebViewTo(url, 'user');
+  }
+
+  private navigateWebViewTo(url: string, source: 'user' | 'agent' = 'user'): void {
+    console.log(`\n=== WEBVIEW NAVIGATION ===`);
+    console.log(`Source: ${source}`);
+    console.log(`Target URL: ${url}`);
+    console.log(`Current URL: ${this.currentUrl}`);
+    
     // Navigate the webview safely
     const webview = document.getElementById('browser-view') as any;
     if (webview) {
       try {
-        // Use src attribute for immediate navigation, loadURL for programmatic
-        webview.src = url;
-        this.currentUrl = url;
-        console.log('WebView navigating to:', url);
+        console.log(`WebView ready state: ${this.webViewReady}`);
+        console.log(`WebView src before: ${webview.src}`);
         
-        // Also try loadURL as backup
+        // Use only loadURL for programmatic navigation to avoid conflicts
         if (webview.loadURL) {
-          webview.loadURL(url).catch((error: any) => {
-            console.warn('loadURL failed, using src attribute:', error);
+          console.log('Using loadURL method');
+          webview.loadURL(url).then(() => {
+            console.log('loadURL successful');
+            this.currentUrl = url;
+            this.updateUrlBar(url);
+          }).catch((error: any) => {
+            console.error('loadURL failed:', error);
+            // Fallback to src attribute
+            console.log('Falling back to src attribute');
+            webview.src = url;
+            this.currentUrl = url;
+            this.updateUrlBar(url);
           });
+        } else {
+          // Fallback to src attribute if loadURL not available
+          console.log('Using src attribute (loadURL not available)');
+          webview.src = url;
+          this.currentUrl = url;
+          this.updateUrlBar(url);
         }
       } catch (error) {
         console.error('Error navigating WebView:', error);
@@ -293,8 +325,12 @@ class BrawzaRenderer {
       console.warn('WebView element not found');
     }
 
-    // Also notify main process for logging
-    window.electronAPI.navigateTo(url).catch(console.error);
+    console.log(`==========================\n`);
+
+    // Only notify main process for user-initiated navigation, not agent-triggered
+    if (source === 'user') {
+      window.electronAPI.navigateTo(url).catch(console.error);
+    }
   }
 
   private onWebViewReady(): void {
@@ -425,12 +461,119 @@ class BrawzaRenderer {
     chatInput.value = '';
 
     try {
-      // Send message to AI service
-      const response = await window.electronAPI.sendMessage(this.currentAIService, message);
-      this.displayMessage('ai', response);
+      // Check if this looks like a browser automation request
+      if (this.isBrowserAutomationRequest(message)) {
+        await this.sendBrowserAgentMessage(message);
+      } else {
+        // Send regular message to AI service
+        const response = await window.electronAPI.sendMessage(this.currentAIService, message);
+        this.displayMessage('ai', response);
+      }
     } catch (error) {
       this.displayMessage('ai', 'Sorry, there was an error processing your request.');
       console.error('AI service error:', error);
+    }
+  }
+
+  private isBrowserAutomationRequest(message: string): boolean {
+    const automationKeywords = [
+      'open', 'navigate', 'go to', 'visit', 'click', 'type', 'fill', 'search',
+      'scroll', 'screenshot', 'take a picture', 'capture', 'find', 'look for',
+      'submit', 'press', 'tap', 'select', 'choose', 'download', 'upload',
+      'login', 'sign in', 'register', 'buy', 'purchase', 'add to cart'
+    ];
+    
+    const lowerMessage = message.toLowerCase();
+    return automationKeywords.some(keyword => lowerMessage.includes(keyword)) ||
+           lowerMessage.includes('.com') || lowerMessage.includes('.org') || 
+           lowerMessage.includes('http') || lowerMessage.includes('www.');
+  }
+
+  private async sendBrowserAgentMessage(message: string): Promise<void> {
+    try {
+      // Ensure Puppeteer page exists for automation
+      const puppeteerReady = await this.ensurePuppeteerPage();
+      if (!puppeteerReady) {
+        this.displayMessage('ai', 'Sorry, I could not initialize the browser automation system.');
+        return;
+      }
+
+      // Synchronize Puppeteer page with current WebView URL for proper context extraction
+      if (this.currentUrl) {
+        console.log(`Synchronizing Puppeteer page to current URL: ${this.currentUrl}`);
+        await window.electronAPI.navigateToUrl(this.currentPageId, this.currentUrl);
+      }
+
+      // Create conversation ID based on current session
+      const conversationId = `chat-session-${Date.now()}`;
+      
+      // Set up agent options
+      const agentOptions = {
+        serviceType: this.currentAIService,
+        pageId: this.currentPageId,
+        autoConfirm: false, // Require confirmation for dangerous actions
+        safetyLevel: 1, // MODERATE safety level
+        maxIterations: 5,
+        includeScreenshot: true
+      };
+
+      // Send message to browser agent
+      this.displayMessage('ai', '🤖 Processing your request with browser automation...');
+      
+      const result = await window.electronAPI.agentSendMessage(conversationId, message, agentOptions);
+      
+      if (result.success && result.response) {
+        const response = result.response;
+        
+        // Display the main AI response
+        this.displayMessage('ai', response.message);
+        
+        // Display screenshot if available
+        if (response.screenshot) {
+          this.displayScreenshot(response.screenshot);
+        }
+        
+        // Display tool execution results
+        if (response.toolResults && response.toolResults.length > 0) {
+          for (const toolResult of response.toolResults) {
+            if (toolResult.success) {
+              if (toolResult.screenshot) {
+                this.displayScreenshot(toolResult.screenshot);
+              }
+              if (toolResult.data && typeof toolResult.data === 'string') {
+                this.displayMessage('ai', `📋 Result: ${toolResult.data}`);
+              }
+            } else if (toolResult.error) {
+              this.displayMessage('ai', `❌ Action failed: ${toolResult.error}`);
+            }
+          }
+        }
+        
+        // Display context updates
+        if (response.contextUpdate) {
+          this.displayMessage('ai', `📍 ${response.contextUpdate}`);
+        }
+        
+        // Handle pending actions that need confirmation
+        if (response.requiresConfirmation && response.pendingActions) {
+          this.displayMessage('ai', '⚠️ This action requires confirmation. Please review and confirm to proceed.');
+        }
+        
+      } else {
+        this.displayMessage('ai', `❌ Browser automation failed: ${result.error || 'Unknown error'}`);
+      }
+      
+    } catch (error) {
+      console.error('Browser agent error:', error);
+      this.displayMessage('ai', 'Sorry, there was an error with browser automation. Falling back to regular chat.');
+      
+      // Fallback to regular AI service
+      try {
+        const response = await window.electronAPI.sendMessage(this.currentAIService, message);
+        this.displayMessage('ai', response);
+      } catch (fallbackError) {
+        this.displayMessage('ai', 'Sorry, there was an error processing your request.');
+      }
     }
   }
 

@@ -96,6 +96,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   onWebViewRefresh: (callback: () => void) => {
     ipcRenderer.on('webview:refresh', () => callback());
+  },
+
+  onAgentNavigateWebView: (callback: (url: string) => void) => {
+    ipcRenderer.on('agent:navigate-webview', (event, url) => callback(url));
   }
 });
 
@@ -146,6 +150,7 @@ declare global {
       onWebViewBack: (callback: () => void) => void;
       onWebViewForward: (callback: () => void) => void;
       onWebViewRefresh: (callback: () => void) => void;
+      onAgentNavigateWebView: (callback: (url: string) => void) => void;
     };
   }
 }

@@ -38,12 +38,10 @@ export class BrowserAgent {
   private aiManager: AIManager;
   private toolExecutor: BrowserToolExecutor;
   private conversations: Map<string, AgentConversation> = new Map();
-  private systemPrompt: string;
 
   constructor(aiManager: AIManager, puppeteerManager: PuppeteerManager) {
     this.aiManager = aiManager;
     this.toolExecutor = new BrowserToolExecutor(puppeteerManager);
-    this.systemPrompt = this.createSystemPrompt();
   }
 
   // Create a new conversation or get existing one
@@ -78,7 +76,7 @@ export class BrowserAgent {
       
       // Update browser context
       const context = await this.toolExecutor.updateContext(options.pageId, {
-        includeScreenshot: options.includeScreenshot,
+        // includeScreenshot: options.includeScreenshot,
         maxContentLength: 2000
       });
 
@@ -101,6 +99,11 @@ export class BrowserAgent {
         timestamp: Date.now()
       });
 
+      console.log(`\n=== USER MESSAGE ===`);
+      console.log(`User message: "${userMessage}"`);
+      console.log(`\n=== CONTEXT ===`);
+      console.log(`Context: ${contextualSystemPrompt}`);
+
       // Get AI service and tools
       const service = this.aiManager.getService(options.serviceType);
       if (!service) {
@@ -120,6 +123,18 @@ export class BrowserAgent {
         response = await service.sendMessage(conversation.messages);
       }
 
+      // Log raw AI response for debugging
+      console.log(`\n=== RAW AI RESPONSE ===`);
+      console.log(`Service: ${options.serviceType}`);
+      console.log(`Content: "${response.content}"`);
+      console.log(`Tool Calls: ${response.toolCalls?.length || 0} calls`);
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        response.toolCalls.forEach((call, index) => {
+          console.log(`  Call ${index + 1}: ${call.name}(${JSON.stringify(call.arguments)})`);
+        });
+      }
+      console.log(`=======================\n`);
+
       // Process the response
       let agentResponse: AgentResponse = {
         message: response.content || 'I understand. Let me help you with that.',
@@ -131,8 +146,7 @@ export class BrowserAgent {
       if (response.toolCalls && response.toolCalls.length > 0) {
         const toolResults = await this.executeToolCalls(
           response.toolCalls,
-          options,
-          conversation
+          options
         );
 
         agentResponse.toolResults = toolResults;
@@ -167,7 +181,7 @@ export class BrowserAgent {
         }
 
         // Update context after actions
-        const updatedContext = await this.toolExecutor.updateContext(options.pageId);
+        await this.toolExecutor.updateContext(options.pageId);
         const contextChange = this.toolExecutor.getContextSummary();
         if (contextChange) {
           agentResponse.contextUpdate = contextChange;
@@ -197,8 +211,7 @@ export class BrowserAgent {
   // Execute tool calls from AI response
   private async executeToolCalls(
     toolCalls: BrowserToolCall[],
-    options: AgentExecutionOptions,
-    conversation: AgentConversation
+    options: AgentExecutionOptions
   ): Promise<BrowserToolResult[]> {
     const results: BrowserToolResult[] = [];
 
@@ -277,13 +290,6 @@ CAPABILITIES:
 - Wait for elements to appear
 - Execute custom JavaScript
 
-GUIDELINES:
-1. Always explain what you're doing before taking actions
-2. For destructive actions (like form submissions), ask for confirmation
-3. If an action fails, try alternative approaches
-4. Provide clear feedback about what happened
-5. Use screenshots when visual confirmation is helpful
-6. Be proactive in suggesting next steps
 
 SAFETY:
 - Never submit forms with sensitive information without explicit confirmation
@@ -291,12 +297,15 @@ SAFETY:
 - Don't execute arbitrary JavaScript that could be harmful
 - Ask for permission before making purchases or financial transactions
 
-Remember: You're helping the user browse and automate their web interactions. Be helpful, safe, and explain your actions clearly.`;
+Remember: You're helping the user browse and automate their web interactions. Work WITH the current page context, not against it. Be helpful, safe, and explain your actions clearly.`;
   }
 
   // Create contextual system prompt with current page state
   private createContextualSystemPrompt(context: BrowserContext): string {
     const basePrompt = this.createSystemPrompt();
+    
+    // Analyze current page for search capabilities
+    const searchAnalysis = this.analyzeSearchCapabilities(context);
     
     const contextInfo = `
 
@@ -305,16 +314,64 @@ URL: ${context.currentUrl}
 Title: ${context.pageTitle}
 Domain: ${context.domain}
 
+IMPORTANT: You are currently on ${context.domain}. The user expects you to work within THIS page unless they explicitly ask to go somewhere else.
+
 Available Elements:
-- Buttons: ${context.buttons.length} (${context.buttons.slice(0, 3).map(b => `"${b.text || b.selector}"`).join(', ')}${context.buttons.length > 3 ? '...' : ''})
-- Links: ${context.links.length} (${context.links.slice(0, 3).map(l => `"${l.text}"`).join(', ')}${context.links.length > 3 ? '...' : ''})
-- Form Fields: ${context.formFields.length} (${context.formFields.slice(0, 3).map(f => f.type).join(', ')}${context.formFields.length > 3 ? '...' : ''})
+- Buttons: ${context.buttons?.length || 0} (${context.buttons?.map(b => `text:"${b.text || b.selector}"${b.type ? ` type:"${b.type}"` : ''}${b.placeholder ? ` placeholder:"${b.placeholder}"` : ''}${b.id ? ` id:"${b.id}"` : ''}${b.className ? ` class:"${b.className}"` : ''}`).join(', ') || 'none'})
+- Links: ${context.links?.length || 0} (${context.links?.map(l => `text:"${l.text}", href:"${l.href}"${l.title ? ` title:"${l.title}"` : ''}${l.id ? ` id:"${l.id}"` : ''}${l.className ? ` class:"${l.className}"` : ''}`).join(', ') || 'none'})
+- Form Fields: ${context.formFields?.length || 0} (${context.formFields?.map(f => `${f.type}${f.placeholder ? ` placeholder:"${f.placeholder}"` : ''}${f.id ? ` id:"${f.id}"` : ''}${f.className ? ` class:"${f.className}"` : ''}`).join(', ') || 'none'})
+
+${searchAnalysis}
 
 Navigation: ${context.canGoBack ? 'Can go back' : 'Cannot go back'}, ${context.canGoForward ? 'Can go forward' : 'Cannot go forward'}
 
-Use this context to make informed decisions about what actions to take.`;
+CONTEXT-AWARE INSTRUCTIONS:
+- If the user asks to search for something, look for search functionality on THIS page first (see search analysis above)
+- Use the available elements listed above to understand what actions are possible on this page
+- Only navigate away if the user explicitly requests it or if no suitable functionality exists on the current page
+- Remember: The user is currently browsing ${context.pageTitle} on ${context.currentUrl} - work within this context`;
 
     return basePrompt + contextInfo;
+  }
+  
+  // Analyze current page for search capabilities
+  private analyzeSearchCapabilities(context: BrowserContext): string {
+    const searchInputs = context.formFields?.filter(field => 
+      field.type === 'search' || 
+      field.placeholder?.toLowerCase().includes('search') ||
+      field.name?.toLowerCase().includes('search') ||
+      field.selector?.toLowerCase().includes('search') ||
+      (field as any).id?.toLowerCase().includes('search') ||
+      (field as any).className?.toLowerCase().includes('search') ||
+      (field as any).title?.toLowerCase().includes('search') ||
+      field.label?.toLowerCase().includes('search')
+    ) || [];
+    
+    const searchButtons = context.buttons?.filter(button =>
+      button.text?.toLowerCase().includes('search') ||
+      button.selector?.toLowerCase().includes('search')
+    ) || [];
+    
+    if (searchInputs.length > 0 || searchButtons.length > 0) {
+      let searchInfo = '\nSEARCH CAPABILITIES DETECTED:\n';
+      
+      if (searchInputs.length > 0) {
+        searchInfo += `- Search Inputs: ${searchInputs.map(input => 
+          `${input.type} field${input.placeholder ? ` (placeholder: "${input.placeholder}")` : ''}${input.selector ? ` [${input.selector}]` : ''}`
+        ).join(', ')}\n`;
+      }
+      
+      if (searchButtons.length > 0) {
+        searchInfo += `- Search Buttons: ${searchButtons.map(btn => 
+          `"${btn.text}"${btn.selector ? ` [${btn.selector}]` : ''}`
+        ).join(', ')}\n`;
+      }
+      
+      searchInfo += '→ USE THESE ELEMENTS when the user asks to search for something on this page!\n';
+      return searchInfo;
+    }
+    
+    return '\nNO OBVIOUS SEARCH FUNCTIONALITY detected on this page. If user asks to search, you may need to navigate to a search engine.\n';
   }
 
   // Check if context has changed significantly

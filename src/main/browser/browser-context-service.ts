@@ -145,7 +145,7 @@ export class BrowserContextService {
             title: el.title || '',
             ariaLabel: el.getAttribute('aria-label') || '',
             id: el.id || '',
-            className: el.className || '',
+            className: (typeof el.className === 'string' ? el.className : el.className?.toString()) || '',
             isClickable: isClickableElement(el),
             isVisible: isVisible,
             bounds: isVisible ? {
@@ -160,7 +160,9 @@ export class BrowserContextService {
         const generateSelector = (el) => {
           if (el.id) return '#' + el.id;
           if (el.className) {
-            const classes = el.className.split(' ').filter(c => c.length > 0);
+            // Handle both string and DOMTokenList cases
+            const classNameStr = typeof el.className === 'string' ? el.className : el.className.toString();
+            const classes = classNameStr.split(' ').filter(c => c.length > 0);
             if (classes.length > 0) return '.' + classes[0];
           }
           return el.tagName.toLowerCase();
@@ -190,7 +192,9 @@ export class BrowserContextService {
             text: el.textContent?.trim().substring(0, 100) || '',
             href: el.href,
             title: el.title || '',
-            isExternal: !el.href.startsWith(window.location.origin)
+            isExternal: !el.href.startsWith(window.location.origin),
+            id: el.id || '',
+            className: (typeof el.className === 'string' ? el.className : el.className?.toString()) || ''
           }))
           .filter(link => link.text.length > 0)
           .slice(0, ${options.maxElementsPerType || 20});
@@ -210,7 +214,13 @@ export class BrowserContextService {
             required: el.required || false,
             label: (el.labels && el.labels[0] ? el.labels[0].textContent?.trim() : '') ||
                    (el.getAttribute('aria-label')) ||
-                   (document.querySelector('label[for="' + el.id + '"]')?.textContent?.trim()) || ''
+                   (document.querySelector('label[for="' + el.id + '"]')?.textContent?.trim()) || '',
+            // Additional attributes for better search detection
+            id: el.id || '',
+            className: (typeof el.className === 'string' ? el.className : el.className?.toString()) || '',
+            title: el.title || '',
+            role: el.getAttribute('role') || '',
+            autocomplete: el.getAttribute('autocomplete') || ''
           }))
           .filter(field => ${options.includeInvisibleElements ? 'true' : 'field.type !== "hidden"'})
           .slice(0, ${options.maxElementsPerType || 20});

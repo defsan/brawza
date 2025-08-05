@@ -486,11 +486,35 @@ class BrawzaApp {
           throw new Error('Browser agent is not initialized. Please ensure AI services are configured.');
         }
 
-        console.log(`Agent message from conversation ${conversationId}:`, userMessage);
+        console.log(`\n=== BROWSER AGENT REQUEST ===`);
+        console.log(`Conversation ID: ${conversationId}`);
+        console.log(`User Message: "${userMessage}"`);
+        console.log(`Options:`, JSON.stringify(options, null, 2));
+        console.log(`Service Type: ${options.serviceType}`);
+        console.log(`Page ID: ${options.pageId}`);
+        console.log(`================================\n`);
+
         const response = await this.browserAgent.sendMessage(conversationId, userMessage, options);
+        
+        console.log(`\n=== BROWSER AGENT RESPONSE ===`);
+        console.log(`Success: true`);
+        console.log(`Message: "${response.message}"`);
+        console.log(`Tool Results: ${response.toolResults?.length || 0} results`);
+        if (response.toolResults && response.toolResults.length > 0) {
+          response.toolResults.forEach((result, index) => {
+            console.log(`  Tool ${index + 1}: ${result.success ? 'SUCCESS' : 'FAILED'} - ${result.message || result.error}`);
+          });
+        }
+        console.log(`Context Update: ${response.contextUpdate || 'none'}`);
+        console.log(`Screenshot: ${response.screenshot ? 'included' : 'none'}`);
+        console.log(`Requires Confirmation: ${response.requiresConfirmation || false}`);
+        console.log(`===================================\n`);
+
         return { success: true, response };
       } catch (error) {
+        console.error('\n=== BROWSER AGENT ERROR ===');
         console.error('Agent message failed:', error);
+        console.error('============================\n');
         return { success: false, error: (error as Error).message };
       }
     });

@@ -131,11 +131,39 @@ export class BrowserToolExecutor {
   // Tool implementations
   private async executeNavigate(args: any, options: ToolExecutionOptions): Promise<BrowserToolResult> {
     const { url } = args;
+    console.log(`\n=== EXECUTING NAVIGATE TOOL ===`);
+    console.log(`URL: ${url}`);
+    console.log(`Page ID: ${options.pageId}`);
+    
     if (!url) {
+      console.log(`Navigation failed: No URL provided`);
       return { success: false, error: 'URL is required for navigation' };
     }
 
+    console.log(`Calling puppeteerManager.navigateToUrl...`);
     const result = await this.puppeteerManager.navigateToUrl(options.pageId, url);
+    
+    console.log(`Navigation result:`, result);
+    console.log(`Success: ${result.success}`);
+    if (result.error) console.log(`Error: ${result.error}`);
+    
+    // If navigation was successful, also navigate the WebView to show the user
+    if (result.success && result.data?.url) {
+      console.log(`Synchronizing WebView to: ${result.data.url}`);
+      try {
+        // Send navigation event to renderer to update WebView
+        const { BrowserWindow } = require('electron');
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('agent:navigate-webview', result.data.url);
+        }
+      } catch (error) {
+        console.warn('Failed to synchronize WebView:', error);
+      }
+    }
+    
+    console.log(`===============================\n`);
+    
     return {
       success: result.success,
       error: result.error,

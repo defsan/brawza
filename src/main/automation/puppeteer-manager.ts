@@ -107,8 +107,16 @@ export class PuppeteerManager extends EventEmitter {
   }
 
   async navigateToUrl(pageId: string, url: string): Promise<AutomationResult> {
+    console.log(`\n=== PUPPETEER NAVIGATION ===`);
+    console.log(`Page ID: ${pageId}`);
+    console.log(`Original URL: ${url}`);
+    
     const page = this.pages.get(pageId);
+    console.log(`Page found: ${page ? 'YES' : 'NO'}`);
+    
     if (!page) {
+      console.log(`Available pages: ${Array.from(this.pages.keys()).join(', ')}`);
+      console.log(`============================\n`);
       return { success: false, error: `Page ${pageId} not found` };
     }
 
@@ -117,6 +125,7 @@ export class PuppeteerManager extends EventEmitter {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = `https://${url}`;
       }
+      console.log(`Final URL: ${url}`);
 
       console.log(`Navigating page ${pageId} to: ${url}`);
       const response = await page.goto(url, { 
@@ -125,18 +134,27 @@ export class PuppeteerManager extends EventEmitter {
       });
 
       const pageInfo = await this.getPageInfo(pageId);
+      const finalUrl = page.url();
+      const title = await page.title();
+      
+      console.log(`Navigation SUCCESS!`);
+      console.log(`Final URL: ${finalUrl}`);
+      console.log(`Page Title: ${title}`);
+      console.log(`Status: ${response?.status()}`);
+      console.log(`============================\n`);
       
       return {
         success: true,
         data: {
-          url: page.url(),
-          title: await page.title(),
+          url: finalUrl,
+          title: title,
           status: response?.status(),
           pageInfo
         }
       };
     } catch (error) {
       console.error(`Navigation failed for page ${pageId}:`, error);
+      console.log(`============================\n`);
       return { 
         success: false, 
         error: `Navigation failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -227,8 +245,7 @@ export class PuppeteerManager extends EventEmitter {
     try {
       const screenshot = await page.screenshot({
         type: 'png',
-        fullPage,
-        quality: 80
+        fullPage
       });
 
       return { 
